@@ -7,28 +7,18 @@ _lcd_dev lcddev;
 uint16_t BACK_COLOR, POINT_COLOR;
 
 MRB3971::MRB3971(uint8_t cs, uint8_t rs, uint8_t rd, uint8_t wr, uint8_t rst, uint8_t PARALLEL_0, uint8_t pin) {
-  _cs = cs; pinMode(_cs, OUTPUT);  digitalWrite(_cs, HIGH);
-  _rs = rs; pinMode(_rs, OUTPUT);  digitalWrite(_rs, HIGH);
-  _rd = rd; pinMode(_rd, OUTPUT);  digitalWrite(_rd, HIGH);
-  _wr = wr; pinMode(_wr, OUTPUT);  digitalWrite(_wr, HIGH);
-  _rst = rst; pinMode(_rst, OUTPUT);  digitalWrite(_rst, HIGH);
-  _csbit = ((uint32_t)1 << _cs);
-  _rsbit = ((uint32_t)1 << _rs);
-  _rdbit = ((uint32_t)1 << _rd);
-  _wrbit = ((uint32_t)1 << _wr);
-  _rstbit = ((uint32_t)1 << _rst);
+  _cs = cs; pinMode(_cs, OUTPUT);  digitalWrite(_cs, HIGH); _csbit = ((uint32_t)1 << _cs);
+  _rs = rs; pinMode(_rs, OUTPUT);  digitalWrite(_rs, HIGH); _rsbit = ((uint32_t)1 << _rs);
+  _rd = rd; pinMode(_rd, OUTPUT);  digitalWrite(_rd, HIGH); _rdbit = ((uint32_t)1 << _rd);
+  _wr = wr; pinMode(_wr, OUTPUT);  digitalWrite(_wr, HIGH); _wrbit = ((uint32_t)1 << _wr);
+  _rst = rst; pinMode(_rst, OUTPUT);  digitalWrite(_rst, HIGH); _rstbit = ((uint32_t)1 << _rst);
   _PARALLEL_0 = PARALLEL_0;  parallel_setup();
   //Init();
   _pin = pin;  pinMode(_pin, OUTPUT);
 }
 
-void MRB3971::ledon() {
-  digitalWrite(_pin, HIGH);
-}
-
-void MRB3971::ledoff() {
-  digitalWrite(_pin, LOW);
-}
+void MRB3971::ledon() { digitalWrite(_pin, HIGH);}
+void MRB3971::ledoff() { digitalWrite(_pin, LOW);}
 
 void MRB3971::parallel_setup(void) { for (int i = 0; i < 8; i++) { pinMode(_PARALLEL_0 + i, INPUT); }}
 void MRB3971::set_inputs(void) { REG_WRITE(GPIO_ENABLE_W1TC_REG, 0xFF << _PARALLEL_0);}
@@ -41,27 +31,12 @@ void MRB3971::parallel_write(uint8_t value) {
   REG_WRITE(GPIO_OUT_REG, output);
 }
 
-void MRB3971::write(uint8_t HVAL,uint8_t LVAL){
-  set_outputs();
-  GPIO.out_w1tc = _csbit; GPIO.out_w1tc = _wrbit;
-   parallel_write(LVAL);
-  GPIO.out_w1ts = _wrbit; GPIO.out_w1ts = _csbit;
-}
 void MRB3971::writex2(uint8_t HVAL,uint8_t LVAL){
   set_outputs();
   GPIO.out_w1tc = _csbit;
   parallel_write(HVAL); GPIO.out_w1tc = _wrbit; GPIO.out_w1ts = _wrbit;
   parallel_write(LVAL); GPIO.out_w1tc = _wrbit; GPIO.out_w1ts = _wrbit;
   GPIO.out_w1ts = _csbit;
-}
-
-uint16_t MRB3971::read(void){
-  uint16_t d;
-  set_inputs() ;
-  GPIO.out_w1tc = _csbit;  GPIO.out_w1tc = _rdbit;
-  ets_delay_us(1);  d =  parallel_read();
-  GPIO.out_w1ts = _rdbit;  GPIO.out_w1ts = _csbit;
-  return d;
 }
 
 void MRB3971::WR_REG(uint16_t Reg){ 
@@ -74,20 +49,25 @@ void MRB3971::WR_DATA(uint16_t Data){
   writex2((Data>>8) & 0xFF, Data & 0xFF);
 }
 
-uint16_t MRB3971::RD_DATA(void){
-  GPIO.out_w1ts = _rsbit;
-  return read();
-}
-
 void MRB3971::WriteReg(uint16_t LCD_Reg, uint16_t LCD_RegValue){
   WR_REG(LCD_Reg);
   WR_DATA(LCD_RegValue);
 }
 
+uint16_t MRB3971::RD_DATA(void){
+  uint16_t rd;
+  GPIO.out_w1ts = _rsbit;
+  set_inputs() ;
+  GPIO.out_w1tc = _csbit;  GPIO.out_w1tc = _rdbit;
+  ets_delay_us(1);  rd =  parallel_read();
+  GPIO.out_w1ts = _rdbit;  GPIO.out_w1ts = _csbit;
+  return rd;
+}
+
 void MRB3971::ReadReg(uint16_t LCD_Reg,uint16_t *Rval,int n){
   WR_REG(LCD_Reg);
   while(n--){ 
-  #ifdef LCD_USE8BIT_MODEL 
+  #ifdef LCD_8BIT 
     *(Rval++) = (RD_DATA()<<8)|RD_DATA();
   #else 
     *(Rval++) = RD__DATA();
@@ -102,14 +82,14 @@ void MRB3971::WriteRAM_Prepare(void){
 void MRB3971::FillWindow(uint16_t Color){
   int i;
   uint8_t colh,coll;
-  //SetWindow(0,0,lcddev.width-1,lcddev.height-1);
+  //SetWindow(0,0,lcddev.w-1,lcddev.h-1);
   GPIO.out_w1tc = _csbit;
   GPIO.out_w1ts = _rsbit;
   colh = (Color>>8) & 0xFF; coll = Color & 0xFF; 
   uint32_t outbuf = (REG_READ(GPIO_OUT_REG) & ~(0xFF << _PARALLEL_0));
   //
-  for(i=0;i<lcddev.width*lcddev.height;i++){
-#ifdef LCD_USE8BIT_MODEL 
+  for(i=0;i<lcddev.w*lcddev.h;i++){
+#ifdef LCD_8BIT 
     REG_WRITE(GPIO_OUT_REG, outbuf | ((uint32_t)colh) << _PARALLEL_0);
     GPIO.out_w1tc = _wrbit; GPIO.out_w1ts = _wrbit;
     REG_WRITE(GPIO_OUT_REG, outbuf | ((uint32_t)coll) << _PARALLEL_0);
@@ -130,14 +110,10 @@ void MRB3971::Reset(void){
 }
 
 void MRB3971::SetWindow(uint16_t xStar, uint16_t yStar,uint16_t xEnd,uint16_t yEnd){  
-  WR_REG(lcddev.setxcmd);   WR_DATA(xStar>>8);  
-  WR_REG(lcddev.setxcmd+1); WR_DATA(xStar&0XFF);   
-  WR_REG(lcddev.setxcmd+2); WR_DATA(xEnd>>8);   
-  WR_REG(lcddev.setxcmd+3); WR_DATA(xEnd&0XFF);   
-  WR_REG(lcddev.setycmd);   WR_DATA(yStar>>8);   
-  WR_REG(lcddev.setycmd+1); WR_DATA(yStar&0XFF);  
-  WR_REG(lcddev.setycmd+2); WR_DATA(yEnd>>8);   
-  WR_REG(lcddev.setycmd+3); WR_DATA(yEnd&0XFF); 
+  WriteReg(lcddev.setxcmd,xStar>>8);  WriteReg(lcddev.setxcmd+1,xStar&0XFF);   
+  WriteReg(lcddev.setxcmd+2,xEnd>>8); WriteReg(lcddev.setxcmd+3,xEnd&0XFF);   
+  WriteReg(lcddev.setycmd,yStar>>8);  WriteReg(lcddev.setycmd+1,yStar&0XFF);  
+  WriteReg(lcddev.setycmd+2,yEnd>>8); WriteReg(lcddev.setycmd+3,yEnd&0XFF); 
   WriteRAM_Prepare();        
 }   
 
@@ -145,256 +121,62 @@ void MRB3971::direction(uint8_t direction){
   lcddev.setxcmd=0x2A00;  lcddev.setycmd=0x2B00;
   lcddev.wramcmd=0x2C00;  lcddev.rramcmd=0x2E00;
   switch(direction){      
-    case 0: lcddev.width=LCD_W; lcddev.height=LCD_H; WriteReg(0x3600,0x00); break;
-    case 1: lcddev.width=LCD_H; lcddev.height=LCD_W; WriteReg(0x3600,(1<<5)|(1<<6)); break;
-    case 2: lcddev.width=LCD_W; lcddev.height=LCD_H; WriteReg(0x3600,(1<<7)|(1<<6)); break;
-    case 3: lcddev.width=LCD_H; lcddev.height=LCD_W; WriteReg(0x3600,(1<<7)|(1<<5)); break;  
+    case 0: lcddev.w=LCD_W; lcddev.h=LCD_H; WriteReg(0x3600,0x00); break;
+    case 1: lcddev.w=LCD_H; lcddev.h=LCD_W; WriteReg(0x3600,(1<<5)|(1<<6)); break;
+    case 2: lcddev.w=LCD_W; lcddev.h=LCD_H; WriteReg(0x3600,(1<<7)|(1<<6)); break;
+    case 3: lcddev.w=LCD_H; lcddev.h=LCD_W; WriteReg(0x3600,(1<<7)|(1<<5)); break;  
     default:break;
   } 
 }  
 
 uint16_t MRB3971::Read_ID(void){
   uint16_t val,valt;
-  WR_REG(0xF000);  WR_DATA(0x55);  WR_REG(0xF001);  WR_DATA(0xAA);
-  WR_REG(0xF002);  WR_DATA(0x52);  WR_REG(0xF003);  WR_DATA(0x08);
-  WR_REG(0xF004);  WR_DATA(0x01);
+  uint8_t iniID[] = {0x55,0xAA,0x52,0x08,0x01}; WriteRegM( 0xF000, sizeof(iniID), iniID);
   ReadReg(0x0c00,&valt,1);  ReadReg(0x0d00,&val,1);  val |= (valt <<= 8);
   return val;
 }
 
+void MRB3971::WriteRegM( uint16_t adr, uint16_t len, uint8_t dat[]){
+  for(int i=0; i<len; i++) WriteReg( adr++, dat[i]);
+}
+
 void MRB3971::Init(void){
-  delay(50);  Reset();
+  Reset();
   //************* NT35510**********//  
-  WR_REG(0xF000); WR_DATA(0x55); WR_REG(0xF001); WR_DATA(0xAA);
-  WR_REG(0xF002); WR_DATA(0x52); WR_REG(0xF003); WR_DATA(0x08);
-  WR_REG(0xF004); WR_DATA(0x01);
-  //# AVDD: manual); WR_DATA(
-  WR_REG(0xB600); WR_DATA(0x34); WR_REG(0xB601); WR_DATA(0x34); WR_REG(0xB602); WR_DATA(0x34);
+  uint8_t ini01[] = {0x55,0xAA,0x52,0x08,0x01}; WriteRegM( 0xF000, sizeof(ini01), ini01);
+  uint8_t ini03[] = {0x34, 0x34, 0x34}; WriteRegM( 0xB600, sizeof(ini03), ini03);
+  uint8_t ini02[] = {0x0D, 0x0D, 0x0D}; WriteRegM( 0xB000, sizeof(ini02), ini02); // AVDD Set AVDD 5.2V
+  uint8_t ini05[] = {0x34, 0x34, 0x34}; WriteRegM( 0xB700, sizeof(ini05), ini05); // AVEE ratio
+  uint8_t ini04[] = {0x0D, 0x0D, 0x0D}; WriteRegM( 0xB100, sizeof(ini04), ini04); // AVEE  -5.2V
+  uint8_t ini07[] = {0x24, 0x24, 0x24}; WriteRegM( 0xB800, sizeof(ini07), ini07); // VCL ratio
+  uint8_t ini10[] = {0x34, 0x34, 0x34}; WriteRegM( 0xB900, sizeof(ini10), ini10); // VGH  ratio
+  uint8_t ini09[] = {0x0F, 0x0F, 0x0F}; WriteRegM( 0xB300, sizeof(ini09), ini09);
+  uint8_t ini14[] = {0x24, 0x24, 0x24}; WriteRegM( 0xBA00, sizeof(ini14), ini14); // VGLX  ratio
+  uint8_t ini12[] = {0x08, 0x08}; WriteRegM( 0xB500, sizeof(ini12), ini12);
+  uint8_t ini15[] = {0x00, 0x78, 0x00}; WriteRegM( 0xBC00, sizeof(ini15), ini15); // VGMP/VGSP 4.5V/0V
+  uint8_t ini16[] = {0x00, 0x78, 0x00}; WriteRegM( 0xBD00, sizeof(ini16), ini16); // VGMN/VGSN -4.5V/0V
+  uint8_t ini17[] = {0x00, 0x89}; WriteRegM( 0xBE00, sizeof(ini17), ini17);  // VCOM  -1.325V
+  // Gamma Setting   
+  uint8_t ini20[] = {
+    0x00, 0x2D, 0x00, 0x2E, 0x00, 0x32, 0x00, 0x44, 0x00, 0x53, 0x00, 0x88, 0x00, 0xB6, 0x00, 0xF3, 0x01, 0x22, 0x01, 0x64,
+    0x01, 0x92, 0x01, 0xD4, 0x02, 0x07, 0x02, 0x08, 0x02, 0x34, 0x02, 0x5F, 0x02, 0x78, 0x02, 0x94, 0x02, 0xA6, 0x02, 0xBB,
+    0x02, 0xCA, 0x02, 0xDB, 0x02, 0xE8, 0x02, 0xF9, 0x03, 0x1F, 0x03, 0x7F }; 
+  WriteRegM( 0xD100, sizeof(ini20), ini20); WriteRegM( 0xD400, sizeof(ini20), ini20); // R+ R-
+  WriteRegM( 0xD200, sizeof(ini20), ini20); WriteRegM( 0xD500, sizeof(ini20), ini20); // G+ G-
+  WriteRegM( 0xD300, sizeof(ini20), ini20); WriteRegM( 0xD600, sizeof(ini20), ini20); // B+ B-
   //
-  WR_REG(0xB000); WR_DATA(0x0D); WR_REG(0xB001); WR_DATA(0x0D); WR_REG(0xB002); WR_DATA(0x0D);
-  //# AVEE: manual); WR_DATA( -6V
-  WR_REG(0xB700); WR_DATA(0x24); WR_REG(0xB701); WR_DATA(0x24); WR_REG(0xB702); WR_DATA(0x24);
+  uint8_t ini21[] = {0x55,0xAA,0x52,0x08,0x00}; WriteRegM( 0xF000, sizeof(ini21), ini21); //#Enable Page0
+  uint8_t ini22[] = {0x08,0x05,0x02,0x05,0x02}; WriteRegM( 0xB000, sizeof(ini22), ini22);  //# RGB I/F Setting
+  WriteReg(0xB600,0x08); WriteReg(0xB500,0x50);  //## SDT: //0x6b ?? 480x854  0x50 ?? 480x800
+  uint8_t ini24[] = {0x00,0x00}; WriteRegM( 0xB700, sizeof(ini24), ini24); //## Gate EQ:
+  uint8_t ini25[] = {0x01,0x05,0x05,0x05}; WriteRegM( 0xB800, sizeof(ini25), ini25); //## Source EQ:
+  uint8_t ini26[] = {0x00,0x00,0x00}; WriteRegM( 0xBC00, sizeof(ini26), ini26); //# Inversion: Column inversion (NVT)
+  uint8_t ini27[] = {0x03,0x00,0x00}; WriteRegM( 0xCC00, sizeof(ini27), ini27); //# BOE's Setting(default)
+  uint8_t ini28[] = {0x01,0x84,0x07,0x31,0x00,0x01}; WriteRegM( 0xBD00, sizeof(ini28), ini28); //# Display Timing:
   //
-  WR_REG(0xB100); WR_DATA(0x0D); WR_REG(0xB101); WR_DATA(0x0D); WR_REG(0xB102); WR_DATA(0x0D);
-  //#Power Control for
-  //VCL
-  WR_REG(0xB800); WR_DATA(0x24); WR_REG(0xB801); WR_DATA(0x24); WR_REG(0xB802); WR_DATA(0x24);
-  WR_REG(0xB200); WR_DATA(0x00);
-  //# VGH: Clamp Enable); WR_DATA(
-  WR_REG(0xB900); WR_DATA(0x24); WR_REG(0xB901); WR_DATA(0x24); WR_REG(0xB902); WR_DATA(0x24);
-  WR_REG(0xB300); WR_DATA(0x05); WR_REG(0xB301); WR_DATA(0x05); WR_REG(0xB302); WR_DATA(0x05);
-  ///WR_REG(0xBF00); WR_DATA(0x01);
-  //# VGL(LVGL):
-  WR_REG(0xBA00); WR_DATA(0x34); WR_REG(0xBA01); WR_DATA(0x34); WR_REG(0xBA02); WR_DATA(0x34);
-  //# VGL_REG(VGLO)
-  WR_REG(0xB500); WR_DATA(0x0B); WR_REG(0xB501); WR_DATA(0x0B); WR_REG(0xB502); WR_DATA(0x0B);
-  //# VGMP/VGSP:
-  WR_REG(0xBC00); WR_DATA(0X00); WR_REG(0xBC01); WR_DATA(0xA3); WR_REG(0xBC02); WR_DATA(0X00);
-  //# VGMN/VGSN
-  WR_REG(0xBD00); WR_DATA(0x00); WR_REG(0xBD01); WR_DATA(0xA3); WR_REG(0xBD02); WR_DATA(0x00);
-  //# VCOM=-0.1
-  WR_REG(0xBE00); WR_DATA(0x00); WR_REG(0xBE01); WR_DATA(0x63);//4f
-  //  VCOMH+0x01;
-  //#R+
-  WR_REG(0xD100); WR_DATA(0x00); WR_REG(0xD101); WR_DATA(0x37);
-  WR_REG(0xD102); WR_DATA(0x00); WR_REG(0xD103); WR_DATA(0x52);
-  WR_REG(0xD104); WR_DATA(0x00); WR_REG(0xD105); WR_DATA(0x7B);
-  WR_REG(0xD106); WR_DATA(0x00); WR_REG(0xD107); WR_DATA(0x99);
-  WR_REG(0xD108); WR_DATA(0x00); WR_REG(0xD109); WR_DATA(0xB1);
-  WR_REG(0xD10A); WR_DATA(0x00); WR_REG(0xD10B); WR_DATA(0xD2);
-  WR_REG(0xD10C); WR_DATA(0x00); WR_REG(0xD10D); WR_DATA(0xF6);
-  WR_REG(0xD10E); WR_DATA(0x01); WR_REG(0xD10F); WR_DATA(0x27);
-  WR_REG(0xD110); WR_DATA(0x01); WR_REG(0xD111); WR_DATA(0x4E);
-  WR_REG(0xD112); WR_DATA(0x01); WR_REG(0xD113); WR_DATA(0x8C);
-  WR_REG(0xD114); WR_DATA(0x01); WR_REG(0xD115); WR_DATA(0xBE);
-  WR_REG(0xD116); WR_DATA(0x02); WR_REG(0xD117); WR_DATA(0x0B);
-  WR_REG(0xD118); WR_DATA(0x02); WR_REG(0xD119); WR_DATA(0x48);
-  WR_REG(0xD11A); WR_DATA(0x02); WR_REG(0xD11B); WR_DATA(0x4A);
-  WR_REG(0xD11C); WR_DATA(0x02); WR_REG(0xD11D); WR_DATA(0x7E);
-  WR_REG(0xD11E); WR_DATA(0x02); WR_REG(0xD11F); WR_DATA(0xBC);
-  WR_REG(0xD120); WR_DATA(0x02); WR_REG(0xD121); WR_DATA(0xE1);
-  WR_REG(0xD122); WR_DATA(0x03); WR_REG(0xD123); WR_DATA(0x10);
-  WR_REG(0xD124); WR_DATA(0x03); WR_REG(0xD125); WR_DATA(0x31);
-  WR_REG(0xD126); WR_DATA(0x03); WR_REG(0xD127); WR_DATA(0x5A);
-  WR_REG(0xD128); WR_DATA(0x03); WR_REG(0xD129); WR_DATA(0x73);
-  WR_REG(0xD12A); WR_DATA(0x03); WR_REG(0xD12B); WR_DATA(0x94);
-  WR_REG(0xD12C); WR_DATA(0x03); WR_REG(0xD12D); WR_DATA(0x9F);
-  WR_REG(0xD12E); WR_DATA(0x03); WR_REG(0xD12F); WR_DATA(0xB3);
-  WR_REG(0xD130); WR_DATA(0x03); WR_REG(0xD131); WR_DATA(0xB9);
-  WR_REG(0xD132); WR_DATA(0x03); WR_REG(0xD133); WR_DATA(0xC1);
-  //#G+
-  WR_REG(0xD200); WR_DATA(0x00); WR_REG(0xD201); WR_DATA(0x37);
-  WR_REG(0xD202); WR_DATA(0x00); WR_REG(0xD203); WR_DATA(0x52);
-  WR_REG(0xD204); WR_DATA(0x00); WR_REG(0xD205); WR_DATA(0x7B);
-  WR_REG(0xD206); WR_DATA(0x00); WR_REG(0xD207); WR_DATA(0x99);
-  WR_REG(0xD208); WR_DATA(0x00); WR_REG(0xD209); WR_DATA(0xB1);
-  WR_REG(0xD20A); WR_DATA(0x00); WR_REG(0xD20B); WR_DATA(0xD2);
-  WR_REG(0xD20C); WR_DATA(0x00); WR_REG(0xD20D); WR_DATA(0xF6);
-  WR_REG(0xD20E); WR_DATA(0x01); WR_REG(0xD20F); WR_DATA(0x27);
-  WR_REG(0xD210); WR_DATA(0x01); WR_REG(0xD211); WR_DATA(0x4E);
-  WR_REG(0xD212); WR_DATA(0x01); WR_REG(0xD213); WR_DATA(0x8C);
-  WR_REG(0xD214); WR_DATA(0x01); WR_REG(0xD215); WR_DATA(0xBE);
-  WR_REG(0xD216); WR_DATA(0x02); WR_REG(0xD217); WR_DATA(0x0B);
-  WR_REG(0xD218); WR_DATA(0x02); WR_REG(0xD219); WR_DATA(0x48);
-  WR_REG(0xD21A); WR_DATA(0x02); WR_REG(0xD21B); WR_DATA(0x4A);
-  WR_REG(0xD21C); WR_DATA(0x02); WR_REG(0xD21D); WR_DATA(0x7E);
-  WR_REG(0xD21E); WR_DATA(0x02); WR_REG(0xD21F); WR_DATA(0xBC);
-  WR_REG(0xD220); WR_DATA(0x02); WR_REG(0xD221); WR_DATA(0xE1);
-  WR_REG(0xD222); WR_DATA(0x03); WR_REG(0xD223); WR_DATA(0x10);
-  WR_REG(0xD224); WR_DATA(0x03); WR_REG(0xD225); WR_DATA(0x31);
-  WR_REG(0xD226); WR_DATA(0x03); WR_REG(0xD227); WR_DATA(0x5A);
-  WR_REG(0xD228); WR_DATA(0x03); WR_REG(0xD229); WR_DATA(0x73);
-  WR_REG(0xD22A); WR_DATA(0x03); WR_REG(0xD22B); WR_DATA(0x94);
-  WR_REG(0xD22C); WR_DATA(0x03); WR_REG(0xD22D); WR_DATA(0x9F);
-  WR_REG(0xD22E); WR_DATA(0x03); WR_REG(0xD22F); WR_DATA(0xB3);
-  WR_REG(0xD230); WR_DATA(0x03); WR_REG(0xD231); WR_DATA(0xB9);
-  WR_REG(0xD232); WR_DATA(0x03); WR_REG(0xD233); WR_DATA(0xC1);
-  //#B+
-  WR_REG(0xD300); WR_DATA(0x00); WR_REG(0xD301); WR_DATA(0x37);
-  WR_REG(0xD302); WR_DATA(0x00); WR_REG(0xD303); WR_DATA(0x52);
-  WR_REG(0xD304); WR_DATA(0x00); WR_REG(0xD305); WR_DATA(0x7B);
-  WR_REG(0xD306); WR_DATA(0x00); WR_REG(0xD307); WR_DATA(0x99);
-  WR_REG(0xD308); WR_DATA(0x00); WR_REG(0xD309); WR_DATA(0xB1);
-  WR_REG(0xD30A); WR_DATA(0x00); WR_REG(0xD30B); WR_DATA(0xD2);
-  WR_REG(0xD30C); WR_DATA(0x00); WR_REG(0xD30D); WR_DATA(0xF6);
-  WR_REG(0xD30E); WR_DATA(0x01); WR_REG(0xD30F); WR_DATA(0x27);
-  WR_REG(0xD310); WR_DATA(0x01); WR_REG(0xD311); WR_DATA(0x4E);
-  WR_REG(0xD312); WR_DATA(0x01); WR_REG(0xD313); WR_DATA(0x8C);
-  WR_REG(0xD314); WR_DATA(0x01); WR_REG(0xD315); WR_DATA(0xBE);
-  WR_REG(0xD316); WR_DATA(0x02); WR_REG(0xD317); WR_DATA(0x0B);
-  WR_REG(0xD318); WR_DATA(0x02); WR_REG(0xD319); WR_DATA(0x48);
-  WR_REG(0xD31A); WR_DATA(0x02); WR_REG(0xD31B); WR_DATA(0x4A);
-  WR_REG(0xD31C); WR_DATA(0x02); WR_REG(0xD31D); WR_DATA(0x7E);
-  WR_REG(0xD31E); WR_DATA(0x02); WR_REG(0xD31F); WR_DATA(0xBC);
-  WR_REG(0xD320); WR_DATA(0x02); WR_REG(0xD321); WR_DATA(0xE1);
-  WR_REG(0xD322); WR_DATA(0x03); WR_REG(0xD323); WR_DATA(0x10);
-  WR_REG(0xD324); WR_DATA(0x03); WR_REG(0xD325); WR_DATA(0x31);
-  WR_REG(0xD326); WR_DATA(0x03); WR_REG(0xD327); WR_DATA(0x5A);
-  WR_REG(0xD328); WR_DATA(0x03); WR_REG(0xD329); WR_DATA(0x73);
-  WR_REG(0xD32A); WR_DATA(0x03); WR_REG(0xD32B); WR_DATA(0x94);
-  WR_REG(0xD32C); WR_DATA(0x03); WR_REG(0xD32D); WR_DATA(0x9F);
-  WR_REG(0xD32E); WR_DATA(0x03); WR_REG(0xD32F); WR_DATA(0xB3);
-  WR_REG(0xD330); WR_DATA(0x03); WR_REG(0xD331); WR_DATA(0xB9);
-  WR_REG(0xD332); WR_DATA(0x03); WR_REG(0xD333); WR_DATA(0xC1);
-
-  //#R-///////////////////////////////////////////
-  WR_REG(0xD400); WR_DATA(0x00); WR_REG(0xD401); WR_DATA(0x37);
-  WR_REG(0xD402); WR_DATA(0x00); WR_REG(0xD403); WR_DATA(0x52);
-  WR_REG(0xD404); WR_DATA(0x00); WR_REG(0xD405); WR_DATA(0x7B);
-  WR_REG(0xD406); WR_DATA(0x00); WR_REG(0xD407); WR_DATA(0x99);
-  WR_REG(0xD408); WR_DATA(0x00); WR_REG(0xD409); WR_DATA(0xB1);
-  WR_REG(0xD40A); WR_DATA(0x00); WR_REG(0xD40B); WR_DATA(0xD2);
-  WR_REG(0xD40C); WR_DATA(0x00); WR_REG(0xD40D); WR_DATA(0xF6);
-  WR_REG(0xD40E); WR_DATA(0x01); WR_REG(0xD40F); WR_DATA(0x27);
-  WR_REG(0xD410); WR_DATA(0x01); WR_REG(0xD411); WR_DATA(0x4E);
-  WR_REG(0xD412); WR_DATA(0x01); WR_REG(0xD413); WR_DATA(0x8C);
-  WR_REG(0xD414); WR_DATA(0x01); WR_REG(0xD415); WR_DATA(0xBE);
-  WR_REG(0xD416); WR_DATA(0x02); WR_REG(0xD417); WR_DATA(0x0B);
-  WR_REG(0xD418); WR_DATA(0x02); WR_REG(0xD419); WR_DATA(0x48);
-  WR_REG(0xD41A); WR_DATA(0x02); WR_REG(0xD41B); WR_DATA(0x4A);
-  WR_REG(0xD41C); WR_DATA(0x02); WR_REG(0xD41D); WR_DATA(0x7E);
-  WR_REG(0xD41E); WR_DATA(0x02); WR_REG(0xD41F); WR_DATA(0xBC);
-  WR_REG(0xD420); WR_DATA(0x02); WR_REG(0xD421); WR_DATA(0xE1);
-  WR_REG(0xD422); WR_DATA(0x03); WR_REG(0xD423); WR_DATA(0x10);
-  WR_REG(0xD424); WR_DATA(0x03); WR_REG(0xD425); WR_DATA(0x31);
-  WR_REG(0xD426); WR_DATA(0x03); WR_REG(0xD427); WR_DATA(0x5A);
-  WR_REG(0xD428); WR_DATA(0x03); WR_REG(0xD429); WR_DATA(0x73);
-  WR_REG(0xD42A); WR_DATA(0x03); WR_REG(0xD42B); WR_DATA(0x94);
-  WR_REG(0xD42C); WR_DATA(0x03); WR_REG(0xD42D); WR_DATA(0x9F);
-  WR_REG(0xD42E); WR_DATA(0x03); WR_REG(0xD42F); WR_DATA(0xB3);
-  WR_REG(0xD430); WR_DATA(0x03); WR_REG(0xD431); WR_DATA(0xB9);
-  WR_REG(0xD432); WR_DATA(0x03); WR_REG(0xD433); WR_DATA(0xC1);
-
-  //#G-//////////////////////////////////////////////
-  WR_REG(0xD500); WR_DATA(0x00); WR_REG(0xD501); WR_DATA(0x37);
-  WR_REG(0xD502); WR_DATA(0x00); WR_REG(0xD503); WR_DATA(0x52);
-  WR_REG(0xD504); WR_DATA(0x00); WR_REG(0xD505); WR_DATA(0x7B);
-  WR_REG(0xD506); WR_DATA(0x00); WR_REG(0xD507); WR_DATA(0x99);
-  WR_REG(0xD508); WR_DATA(0x00); WR_REG(0xD509); WR_DATA(0xB1);
-  WR_REG(0xD50A); WR_DATA(0x00); WR_REG(0xD50B); WR_DATA(0xD2);
-  WR_REG(0xD50C); WR_DATA(0x00); WR_REG(0xD50D); WR_DATA(0xF6);
-  WR_REG(0xD50E); WR_DATA(0x01); WR_REG(0xD50F); WR_DATA(0x27);
-  WR_REG(0xD510); WR_DATA(0x01); WR_REG(0xD511); WR_DATA(0x4E);
-  WR_REG(0xD512); WR_DATA(0x01); WR_REG(0xD513); WR_DATA(0x8C);
-  WR_REG(0xD514); WR_DATA(0x01); WR_REG(0xD515); WR_DATA(0xBE);
-  WR_REG(0xD516); WR_DATA(0x02); WR_REG(0xD517); WR_DATA(0x0B);
-  WR_REG(0xD518); WR_DATA(0x02); WR_REG(0xD519); WR_DATA(0x48);
-  WR_REG(0xD51A); WR_DATA(0x02); WR_REG(0xD51B); WR_DATA(0x4A);
-  WR_REG(0xD51C); WR_DATA(0x02); WR_REG(0xD51D); WR_DATA(0x7E);
-  WR_REG(0xD51E); WR_DATA(0x02); WR_REG(0xD51F); WR_DATA(0xBC);
-  WR_REG(0xD520); WR_DATA(0x02); WR_REG(0xD521); WR_DATA(0xE1);
-  WR_REG(0xD522); WR_DATA(0x03); WR_REG(0xD523); WR_DATA(0x10);
-  WR_REG(0xD524); WR_DATA(0x03); WR_REG(0xD525); WR_DATA(0x31);
-  WR_REG(0xD526); WR_DATA(0x03); WR_REG(0xD527); WR_DATA(0x5A);
-  WR_REG(0xD528); WR_DATA(0x03); WR_REG(0xD529); WR_DATA(0x73);
-  WR_REG(0xD52A); WR_DATA(0x03); WR_REG(0xD52B); WR_DATA(0x94);
-  WR_REG(0xD52C); WR_DATA(0x03); WR_REG(0xD52D); WR_DATA(0x9F);
-  WR_REG(0xD52E); WR_DATA(0x03); WR_REG(0xD52F); WR_DATA(0xB3);
-  WR_REG(0xD530); WR_DATA(0x03); WR_REG(0xD531); WR_DATA(0xB9);
-  WR_REG(0xD532); WR_DATA(0x03); WR_REG(0xD533); WR_DATA(0xC1);
-  //#B-///////////////////////////////
-  WR_REG(0xD600); WR_DATA(0x00); WR_REG(0xD601); WR_DATA(0x37);
-  WR_REG(0xD602); WR_DATA(0x00); WR_REG(0xD603); WR_DATA(0x52);
-  WR_REG(0xD604); WR_DATA(0x00); WR_REG(0xD605); WR_DATA(0x7B);
-  WR_REG(0xD606); WR_DATA(0x00); WR_REG(0xD607); WR_DATA(0x99);
-  WR_REG(0xD608); WR_DATA(0x00); WR_REG(0xD609); WR_DATA(0xB1);
-  WR_REG(0xD60A); WR_DATA(0x00); WR_REG(0xD60B); WR_DATA(0xD2);
-  WR_REG(0xD60C); WR_DATA(0x00); WR_REG(0xD60D); WR_DATA(0xF6);
-  WR_REG(0xD60E); WR_DATA(0x01); WR_REG(0xD60F); WR_DATA(0x27);
-  WR_REG(0xD610); WR_DATA(0x01); WR_REG(0xD611); WR_DATA(0x4E);
-  WR_REG(0xD612); WR_DATA(0x01); WR_REG(0xD613); WR_DATA(0x8C);
-  WR_REG(0xD614); WR_DATA(0x01); WR_REG(0xD615); WR_DATA(0xBE);
-  WR_REG(0xD616); WR_DATA(0x02); WR_REG(0xD617); WR_DATA(0x0B);
-  WR_REG(0xD618); WR_DATA(0x02); WR_REG(0xD619); WR_DATA(0x48);
-  WR_REG(0xD61A); WR_DATA(0x02); WR_REG(0xD61B); WR_DATA(0x4A);
-  WR_REG(0xD61C); WR_DATA(0x02); WR_REG(0xD61D); WR_DATA(0x7E);
-  WR_REG(0xD61E); WR_DATA(0x02); WR_REG(0xD61F); WR_DATA(0xBC);
-  WR_REG(0xD620); WR_DATA(0x02); WR_REG(0xD621); WR_DATA(0xE1);
-  WR_REG(0xD622); WR_DATA(0x03); WR_REG(0xD623); WR_DATA(0x10);
-  WR_REG(0xD624); WR_DATA(0x03); WR_REG(0xD625); WR_DATA(0x31);
-  WR_REG(0xD626); WR_DATA(0x03); WR_REG(0xD627); WR_DATA(0x5A);
-  WR_REG(0xD628); WR_DATA(0x03); WR_REG(0xD629); WR_DATA(0x73);
-  WR_REG(0xD62A); WR_DATA(0x03); WR_REG(0xD62B); WR_DATA(0x94);
-  WR_REG(0xD62C); WR_DATA(0x03); WR_REG(0xD62D); WR_DATA(0x9F);
-  WR_REG(0xD62E); WR_DATA(0x03); WR_REG(0xD62F); WR_DATA(0xB3);
-  WR_REG(0xD630); WR_DATA(0x03); WR_REG(0xD631); WR_DATA(0xB9);
-  WR_REG(0xD632); WR_DATA(0x03); WR_REG(0xD633); WR_DATA(0xC1);
-  //#Enable Page0
-  WR_REG(0xF000); WR_DATA(0x55); WR_REG(0xF001); WR_DATA(0xAA);
-  WR_REG(0xF002); WR_DATA(0x52); WR_REG(0xF003); WR_DATA(0x08);
-  WR_REG(0xF004); WR_DATA(0x00);
-  //# RGB I/F Setting
-  WR_REG(0xB000); WR_DATA(0x08); WR_REG(0xB001); WR_DATA(0x05);
-  WR_REG(0xB002); WR_DATA(0x02); WR_REG(0xB003); WR_DATA(0x05);
-  WR_REG(0xB004); WR_DATA(0x02);
-  //## SDT:
-  WR_REG(0xB600); WR_DATA(0x08); WR_REG(0xB500); WR_DATA(0x50);//0x6b ?? 480x854  0x50 ?? 480x800
-  //## Gate EQ:
-  WR_REG(0xB700); WR_DATA(0x00); WR_REG(0xB701); WR_DATA(0x00);
-  //## Source EQ:
-  WR_REG(0xB800); WR_DATA(0x01); WR_REG(0xB801); WR_DATA(0x05);
-  WR_REG(0xB802); WR_DATA(0x05); WR_REG(0xB803); WR_DATA(0x05);
-  //# Inversion: Column inversion (NVT)
-  WR_REG(0xBC00); WR_DATA(0x00); WR_REG(0xBC01); WR_DATA(0x00); WR_REG(0xBC02); WR_DATA(0x00);
-  //# BOE's Setting(default)
-  WR_REG(0xCC00); WR_DATA(0x03); WR_REG(0xCC01); WR_DATA(0x00); WR_REG(0xCC02); WR_DATA(0x00);
-  //# Display Timing:
-  WR_REG(0xBD00); WR_DATA(0x01); WR_REG(0xBD01); WR_DATA(0x84);
-  WR_REG(0xBD02); WR_DATA(0x07); WR_REG(0xBD03); WR_DATA(0x31);
-  WR_REG(0xBD04); WR_DATA(0x00);
-  WR_REG(0xBA00); WR_DATA(0x01);
-  //
-  WR_REG(0xFF00); WR_DATA(0xAA); WR_REG(0xFF01); WR_DATA(0x55);
-  WR_REG(0xFF02); WR_DATA(0x25); WR_REG(0xFF03); WR_DATA(0x01);
-  //
-  WR_REG(0x3500); WR_DATA(0x00); WR_REG(0x3600); WR_DATA(0x00);
-  WR_REG(0x3a00); WR_DATA(0x55);  ////55=16?/////66=18?
-  WR_REG(0x1100);
-  delay(120); 
-  WR_REG(0x2900 );  WR_REG(0x2c00);
-  direction(0); 
-  BACK_COLOR=BLACK; POINT_COLOR=WHITE;
-//BL=1;  
+  uint8_t ini30[] = {0xAA,0x55,0x25,0x01}; WriteRegM( 0xFF00, sizeof(ini30), ini30);
+  WriteReg(0x3500,0x00); WriteReg(0x3600,0x00); WriteReg(0x3a00,0x55);  //0x55=16bit Mode
+  WR_REG(0x1100); delay(120); WR_REG(0x2900); delay(120); WR_REG(0x2c00);
 }
 
 PROGMEM const unsigned char asc2_1608[1520]={
@@ -449,13 +231,13 @@ PROGMEM const unsigned char asc2_1608[1520]={
 }; 
 
 void MRB3971::DrawPoint(uint16_t x,uint16_t y){
-  if(x<lcddev.width-1 && y<lcddev.height-1 ){
+  if(x<lcddev.w-1 && y<lcddev.h-1 ){
     SetWindow(x,y,x,y); WR_DATA(POINT_COLOR);
   }
 }
 uint16_t MRB3971::ReadPoint(uint16_t x,uint16_t y){
   uint16_t color;
-  if(x>=lcddev.width || y>=lcddev.height) return 0;  
+  if(x>=lcddev.w || y>=lcddev.h) return 0;  
   SetWindow(x,y,x,y);     // LCD_SetCursor(x,y); 
   WR_REG(lcddev.rramcmd); // LCD_ReadRAM_Prepare();
 
@@ -476,7 +258,7 @@ void MRB3971::ShowChar(uint16_t x,uint16_t y,uint8_t num,uint8_t mode){
   uint8_t temp, pos,t;
   uint16_t x0=x;
   uint16_t colortemp=POINT_COLOR;      
-  if(x>=lcddev.width || y>=lcddev.height) return;     
+  if(x>=lcddev.w || y>=lcddev.h) return;     
   num=num-' '; SetWindow(x,y,x+8-1,y+16-1);
   if(!mode){
     for(pos=0;pos<16;pos++){ 
@@ -502,14 +284,18 @@ void MRB3971::ShowChar(uint16_t x,uint16_t y,uint8_t num,uint8_t mode){
 }   
 void MRB3971::ShowString(uint16_t x,uint16_t y,uint8_t *p){         
     while(*p!='\0') {       
-        if(x>lcddev.width-16){x=0;y+=16;}
-        if(y>lcddev.height-16) {y=x=0;}
+        if(x>lcddev.w-16){x=0;y+=16;}
+        if(y>lcddev.h-16) {y=x=0;}
         ShowChar(x,y,*p,0); x+=8; p++;
     }  
 }
 
 void MRB3971::Fill(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2){
   SetWindow(x1,y1,x2,y2); FillWindow(POINT_COLOR);
+}
+
+void MRB3971::Clear(uint8_t dir, uint16_t color){
+  direction(dir); SetWindow(0,0,lcddev.w-1,lcddev.h-1); FillWindow(color);  
 }
 
 void MRB3971::DrawCircle(uint16_t x0,uint16_t y0,uint8_t r){

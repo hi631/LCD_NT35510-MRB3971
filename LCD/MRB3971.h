@@ -5,15 +5,14 @@
 #include <Arduino.h>
 
 typedef struct{                        
-  uint16_t width, height, id;
+  uint16_t w, h, id;
   uint8_t  dir; 
   uint16_t  wramcmd, rramcmd, setxcmd, setycmd;  
 } _lcd_dev; 
 
 #define LCD_W 480
 #define LCD_H 800
-#define USE_HORIZONTAL      0   // 0-0 1-90 2-180 3-270
-#define LCD_USE8BIT_MODEL   1   // 8Bit parallel Mode
+#define LCD_8BIT    // 8Bit parallel Mode
 
 // color define
 #define WHITE      0xFFFF
@@ -32,17 +31,17 @@ public:
   void set_outputs(void);
   uint8_t parallel_read(void);
   void parallel_write(uint8_t value);
-  void write(uint8_t HVAL,uint8_t LVAL);
   void writex2(uint8_t HVAL,uint8_t LVAL);
-  uint16_t read(void);
   void WR_REG(uint16_t Reg);
   void WR_DATA(uint16_t Data);
-  uint16_t RD_DATA(void);
   void WriteReg(uint16_t Reg, uint16_t RegValue);
+  uint16_t RD_DATA(void);
   void ReadReg(uint16_t Reg,uint16_t *Rval,int n);
   void WriteRAM_Prepare(void);
   void FillWindow(uint16_t Color);
+  void Clear(uint8_t dir, uint16_t color);
   void Reset(void);
+  void WriteRegM( uint16_t adr, uint16_t len, uint8_t dat[]);
   void Init(void);
   void SetWindow(uint16_t xStar, uint16_t yStar,uint16_t xEnd,uint16_t yEnd);
   void direction(uint8_t direction);
