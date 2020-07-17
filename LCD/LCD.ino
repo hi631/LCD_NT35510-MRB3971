@@ -1,4 +1,4 @@
-#include "MRB3971.h" 
+#include "MRB3971.h"
 
 #define LCD_CS   5
 #define LCD_RS   4
@@ -18,14 +18,14 @@ uint16_t rnd16(){ return random(0,65000);}
 
 void drawdemo(){
   // Draw Demo
-  uint16_t sx=0,sy=0,ex,ey;
+  uint16_t i,sx=0,sy=0,ex,ey;
   LCD.Clear(3, WHITE); LCD.Clear(3, BLACK); 
-  for(int i=0;i<20;i++) { POINT_COLOR = rnd16(); LCD.Fill(rndw(),rndh(),rndw(),rndh());}
-  for(int i=0;i<10;i++) { POINT_COLOR = rnd16(); LCD.DrawCircle(rndw(),rndh(),rndh()/2+50);}
-  for(int i=0;i<10;i++) { POINT_COLOR = rnd16(); ex=rndw(); ey=rndh(); LCD.DrawLine(sx,sy,ex,ey); sx=ex; sy=ey;}
-  for(int i=0;i<10;i++) { POINT_COLOR = rnd16(); LCD.DrawRectangle(rndw(),rndh(),rndw(),rndh());}
-  for(int i=0;i<20;i++) LCD.paint(rndw(),rndh(),rnd16());
-  POINT_COLOR = WHITE; LCD.ShowString(10,10,(uint8_t *)"LCD Draw Demo");
+  for(i=0;i<20;i++) { POINT_COLOR = rnd16(); LCD.Fill(rndw(),rndh(),rndw(),rndh());}
+  for(i=0;i<10;i++) { POINT_COLOR = rnd16(); LCD.DrawCircle(rndw(),rndh(),rndh()/2+50);}
+  for(i=0;i<10;i++) { POINT_COLOR = rnd16(); ex=rndw(); ey=rndh(); LCD.DrawLine(sx,sy,ex,ey); sx=ex; sy=ey;}
+  for(i=0;i<10;i++) { POINT_COLOR = rnd16(); LCD.DrawRectangle(rndw(),rndh(),rndw(),rndh());}
+  for(i=0;i<20;i++) LCD.paint(rndw(),rndh(),rnd16());
+  for(i=0;i<4;i++) { POINT_COLOR = WHITE;LCD.direction(i); LCD.ShowString(10,10,(uint8_t *)"LCD Draw Demo");}
 }
 //--  Start UP  --------------------------
 void setup() {            

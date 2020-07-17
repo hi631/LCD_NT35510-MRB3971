@@ -1,4 +1,4 @@
-// MRB3971.h 
+// MRB3971.h
 //
 #ifndef MRB3971_LIBRARY
 #define MRB3971_LIBRARY
